@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { DAILY_ROOMS } from '@/lib/daily-config';
 import { UI_CONSTANTS } from '@/lib/constants';
 import { Classroom, AppUser } from '@/lib/types';
@@ -173,10 +173,14 @@ function UserForm({ onSubmit, disabled }: UserFormProps) {
  * Handles user input and classroom selection
  */
 export default function Lobby({ onJoinClassroom }: LobbyProps) {
+  console.log('[Lobby] Component rendering');
+  
   const [user, setUser] = useState<Omit<AppUser, 'sessionId' | 'currentClassroom' | 'joinedAt'> | null>(null);
   const [classroomStates, setClassroomStates] = useState<Record<string, { participantCount: number; isActive: boolean }>>({});
   const [isLoading, setIsLoading] = useState(false);
   const [selectedClassroom, setSelectedClassroom] = useState<string | null>(null);
+  const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  const isFetchingRef = useRef(false);
 
   // Convert DAILY_ROOMS to Classroom interface format
   const classrooms: Classroom[] = DAILY_ROOMS.map(room => ({
@@ -188,7 +192,17 @@ export default function Lobby({ onJoinClassroom }: LobbyProps) {
 
   // Fetch classroom states from API
   useEffect(() => {
+    console.log('[Lobby] useEffect running - setting up polling');
+    
     const fetchClassroomStates = async () => {
+      // Prevent overlapping fetches
+      if (isFetchingRef.current) {
+        console.log('[Lobby] Skipping fetch - already in progress');
+        return;
+      }
+      
+      console.log('[Lobby] Fetching classroom states...');
+      isFetchingRef.current = true;
       try {
         const response = await fetch('/api/rooms');
         if (response.ok) {
@@ -208,19 +222,35 @@ export default function Lobby({ onJoinClassroom }: LobbyProps) {
         console.error('Failed to fetch classroom states:', error);
         // Initialize with empty states if API fails
         const emptyStates: Record<string, { participantCount: number; isActive: boolean }> = {};
-        classrooms.forEach(classroom => {
-          emptyStates[classroom.id] = { participantCount: 0, isActive: false };
+        DAILY_ROOMS.forEach(room => {
+          emptyStates[room.id] = { participantCount: 0, isActive: false };
         });
         setClassroomStates(emptyStates);
+      } finally {
+        isFetchingRef.current = false;
       }
     };
+
+    // Clear any existing interval first
+    if (intervalRef.current) {
+      console.log('[Lobby] Clearing existing interval');
+      clearInterval(intervalRef.current);
+    }
 
     fetchClassroomStates();
     
     // Poll for updates every 5 seconds
-    const interval = setInterval(fetchClassroomStates, 5000);
-    return () => clearInterval(interval);
-  }, [classrooms]);
+    console.log('[Lobby] Starting 5-second interval');
+    intervalRef.current = setInterval(fetchClassroomStates, 5000);
+    
+    return () => {
+      console.log('[Lobby] Cleanup - clearing interval');
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
+    };
+  }, []); // Empty dependency array - only run once on mount
 
   const handleUserSubmit = (userData: Omit<AppUser, 'sessionId' | 'currentClassroom' | 'joinedAt'>) => {
     setUser(userData);

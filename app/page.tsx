@@ -1,6 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
+import { useCallback } from 'react';
 import Lobby from '@/app/components/Lobby';
 import { AppUser } from '@/lib/types';
 
@@ -31,11 +32,11 @@ export default function Home() {
    * @param classroomId - The ID of the classroom to join
    * @param user - The user data including name, role, sessionId
    */
-  const handleJoinClassroom = (classroomId: string, user: AppUser) => {
+  const handleJoinClassroom = useCallback((classroomId: string, user: AppUser) => {
     // Navigate to the classroom page
     // The classroom page will handle Daily.co connection
     router.push(`/classroom/${classroomId}?name=${encodeURIComponent(user.name)}&role=${user.role}&sessionId=${user.sessionId}`);
-  };
+  }, [router]);
 
   return (
     <Lobby onJoinClassroom={handleJoinClassroom} />
